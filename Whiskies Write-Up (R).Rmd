@@ -1,0 +1,273 @@
+---
+title: "Whiskies Write-Up (R)"
+output: html_notebook
+---
+
+This exercise was originally completed in Python, during my completion of Week 4, Case Study 1 of the free access version of Harvard EdX course ["Using Python for Research"](https://www.edx.org/course/using-python-for-research) in the summer of 2022. This translation to R was performed in the Spring of 2023.
+
+The [Tidyverse](https://www.tidyverse.org/), [Janitor](https://cran.r-project.org/web/packages/janitor/index.html), (sjmisc)[https://cran.r-project.org/web/packages/sjmisc/index.html], and (ComplexHeatmap)(https://www.bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) packages were installed prior to generation, and this write-up was created as an Rnotebook with Rstudio.
+
+The use of ComplexHeatmap has a requested citation from the creator:
+
+Gu, Z. (2016) Complex heatmaps reveal patterns and correlations in multidimensional genomic data. Bioinformatics. DOI: 10.1093/bioinformatics/btw313.
+
+# Importation of Data
+
+Rstudio has a feature which makes importation of data from a CSV file to a tibble user friendly. This example write up will skip that step to demonstrate the ability to manually assess imported data.
+
+SuppressMessages was used to suppress default console warning messages that these features were not used.
+
+```{r}
+library(tidyverse)
+library(readr)
+whiskey <- suppressMessages(read_csv("https://courses.edx.org/asset-v1:HarvardX+PH526x+2T2019+type@asset+block@whiskies.csv",show))
+```
+# Whiskey Exploration
+
+The first stage of utilizing any new data set should be exploration of the data included in the set, including its source.
+
+## Cleaning Up The Data
+
+This data set was originally provided as a csv file. We come into the data set with the expectation that each row contains data about a single whiskey produced in Scotland, with one Whiskey per distillery. Each Whiskey is "graded" on various aspects of its flavor profile (though, from the data set itself, we do not know by whom or what specific criteria may have been used for evaluation).
+
+Exploration of the created `whiskey` DataFrame reveals that there are 86 included Whiskies, and 18 'Columns' of Data for each Whiskey.
+
+```{r}
+dim(whiskey)
+head(whiskey)
+```
+We can see that the first row appears to indicate column names, so we can simplify our tibble. There is a function for this in the Janitor package.
+```{r}
+library(janitor)
+whiskey <- whiskey %>% row_to_names(row_number=1)
+head(whiskey)
+```
+
+We use `names(whiskey)` to retrieve the names of all columns in the data set, to examine what points of data we expect to be provided about each whiskey.
+
+```{r}
+names(whiskey)
+```
+We see the first two columns **NA** and **RowID** appear to be an arbitrary count.
+
+The third column, **Distillery**, appears to be the name of the distillery the whiskey came from. From what we expected coming into our dataset, there is one whiskey per distillery. This means that **Distillery** can serve as our "key". 
+
+We find that all flavors are included in the next 11 columns: **Sweetness**, **Smoky**, **Medicinal**, **Tobacco**, **Honey**, **Spicy**, **Winey**, **Nutty**, **Malty**, **Fruity**, and **Floral**.
+
+We find that the remaining columns describe the geographic location of the distillery that produced each whiskey: **Postcode**, **Latitude**, **Longitude**, and **Region**.
+
+We can drop both columns that appear to serve as a RowID, since we do not need them. Similarly, we will be generating values for the last column, **Group**, and can drop the imported values. The Dplyr package has a function for this.
+```{r}
+library(dplyr)
+whiskey <- select(whiskey,-c(1,2,20))
+head(whiskey)
+```
+Thanks to our tibble, we may notice that our columns all are storing their data as `character`s. This is confirmed by checking the class for all of our columns.
+```{r}
+sapply(whiskey,class)
+```
+Luckily Dplyr has a method to quickly convert our columns that contain only numeric values to a numeric data class.
+
+We specify which columns we would like to convert. We store the names of the flavors in **flavor**, and add *Latitude* and *Longitude* to a list of numeric column names.
+```{r}
+flavors <- names(whiskey[2:13])
+numerics <- c(flavors, "Latitude", "Longitude")
+
+whiskey <- whiskey %>% mutate_at(flavors,as.numeric)
+head(whiskey)
+```
+Since we are primarily interested in the relationship between each Whiskey and its flavor profile, we can create two sub-sets of our data frame that only contains the flavors and Distillery name
+
+```{r}
+flavorSubsetCols <- c("Distillery", flavors)
+flavorProfiles <- whiskey[flavorSubsetCols]
+head(flavorProfiles)
+```
+
+## Exploration (Flavors)
+
+How are these flavor profiles characterized? In our initial examination, we noted that there appeared to be *integer* values in each cell relating to an aspect of the *flavor profile*.
+
+We can examine these scores in a bit more detail, so we understand how these whiskies have been characterized.
+
+First, we can inspect the maximum values of each *flavor*. **Tobacco** appears to have the lowest maximum, with a peak score of 1. No *flavor* has a score higher than 4.
+```{r}
+flavorProfiles %>% summarize_if(is.numeric,max,na.rm=TRUE)
+```
+Inspection of minimum values shows that each *flavor* has a minimum score of 0 except for **Sweetness**, which has a minimum score of 1.
+
+```{r}
+flavorProfiles %>% summarize_if(is.numeric,min,na.rm=TRUE)
+```
+
+Each *flavor* appears to be scored from 0 - 4, with no half scores. Functionally, this is a *discrete numeric variable*. While there is no legend provided in the data set, it may be a reasonable assumption to believe that a score of 0 indicates a *lack of a flavor*, while a score of 4 indicates a *strong flavor*, with intermediary scores dividing the resulting continuum of intensity.
+
+We can perform some basic summary statistics to explore each of these *flavors* further, if desired, using the built-in `summary()` function in R. We create a subset of the data (`flavorData`) that does not have the **Distillery** column to avoid those values being counted.
+
+We see that every whiskey has a rating for each *flavor*. The median scores appear similar to means with a cursory overview.
+
+```{r}
+flavorData <- whiskey[flavors]
+summary(flavorData)
+```
+### Exploring Linear Correlations
+#### Pairwise Linear Correlations: Flavor to Flavor
+
+Now that we have a general understanding of the shape and form of our data set, we can explore relationships expressed within it. 
+
+First, we'd like to examine relationships between individual *flavors* that compose each *flavor profile*. 
+
+R has a built in function for Linear Correlations: `cor()`. 
+
+The documentation for the `cor()` function is worth examining: we can pass a data frame, and R will perform a pairwise correlation among columns. The `flavorData` subset will be most useful here, as we are comparing each flavor to the other.
+
+We are returned a new data frame. Each column still corresponds to each *flavor*, but each *row* indicates which *flavor* the column *flavor* was associated with rather than an individual whiskey. 
+
+Values of Pearson Correlation Coefficients range from -1 to 1. Negative values indicate a negative association (indicating the *flavors* are **less** likely to appear together), while positive values indicate a positive association (indicating *flavors* are *more* likely to appear together). A value of 0 indicates **no relationship**. 
+If each *flavor* was scored in a binary "yes/no" or 0/1 fashion, we might expect the correlation to only extend to the presence of each *flavor,* but because the *flavors* are scored on intensity, the intensity of the flavors impact our correlation as well. As such each cell value is the Pearson Correlation Coefficients of the association between the value of the *column flavor*, factoring in intensity, to the *row flavor*, also factoring in intensity. We can interpret this to state that *the higher absolute value the Pearson Correlation Coefficient, the stronger the link between the intensity of the two flavors*. 
+
+We store this new data frame of correlation values as `flavorCorrelations`.
+
+**It is important to remember that these associations do not imply direction or causality! As such, the association of *"Sweetness"* to *"Honey"* is the same as the association of *"Honey"* to *"Sweetness"*.**
+
+
+```{r}
+flavorCorrelations <- cor(flavorData,method="pearson")
+```
+Based on our knowledge of Pairwise Linear Correlations and the `cor()` function, we can do a few checks to ensure we have an output that conforms to our theoretical expectations.
+
+1. We expect our data to be symmetrical with 12 columns and 12 rows. This is because we have 12 individual *flavors*. We can check this with the `dim()` command.
+```{r}
+dim(flavorCorrelations)
+```
+2. We can expect the data along the diagonal to represent consistent values of 1. 
+
+This is because `flavorCorrelations[1,1]` represents the same *flavor* associated with itself. As each *flavor* is only rated once for each whiskey, it logically follows that the correlation between scores for any *flavor*, such as **"Sweetness"** to **"Sweetness"** or **"Spicy"** to **"Spicy"** must be 1:1.
+```{r}
+head(flavorCorrelations)
+```
+3. We expect the data to be mirrored symmetrically along the diagonal. 
+
+This is because association does not have a direction. As such, the correlation between **"Sweetness"** and **"Honey"**, the second and sixth *flavors* (at index 2 and 6 respectively) should be found to be the same regardless of the direction of comparison.
+
+We check this by comparing the values at [2,6] and [6,2] - they should be identical. And they are, both holding a value of **0.1325581**.
+```{r}
+print(flavorCorrelations[2,6])
+print(flavorCorrelations[6,2])
+print(flavorCorrelations[2,6] == flavorCorrelations[6,2])
+```
+While this correlation data set, at 12 by 12, is manageable, this process needs to be scaleable. 
+
+The ComplexHeatmap library provides us with a robust tool for creating a heatmap of the correlation values.
+```{r}
+library(ComplexHeatmap)
+Heatmap(flavorCorrelations, column_title = "Correlations of Flavors in Whiskeys", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"))
+```
+As we can see, our `Heatmap` provides a wealth of information about our *flavors* at a glance. 
+
+We can check our data against our expectations at a glance:
+1. We have an 12 x 12 product, reflecting that each *flavor* was correlated with each other *flavor*
+2. The diagonal represents consistent values of 1, as each *flavor* has a 1:1 correlation with itself.
+3. The data is mirrored symmetrically across the diagonal, as the associations have no direction.
+
+In any individual *flavor profile*, it is unlikely for a whiskey to have **"Sweetness"**, while also being either **"Medicinal"** or **"Smoky"**. Conversely, a whiskey with **"Body"** appears to be more likely to also be considered **"Winey"**.
+
+This is an interesting overview of all of the whiskies, but what else can we do with this data?
+#### Linear Pairwise Correlations: Distillery to Distillery (Comparison of Flavor Profiles)
+
+The data takes on a much more interesting form for analysis when we take it's `transpose`. When we take the `transpose` of a data frame, we "flip" the data across its diagonal - rows convert into columns, and vice versa.
+
+In our `flavorProfile` data set, this organizes each column into the *flavor profile* of each Distillery's product. We can then take the Linear Pairwise Correlations of each column (each distillery's flavor profile) to find the relationship between the *flavor profiles of each distillery*.
+
+This quantifies how similar the flavor profile of a **"Tullibardine"** whiskey is to, say, an **"Aberfeldy"** whiskey. Which could be quite useful. Do you have anyone who is partial to a very particular whiskey, and worried that you might not be able to get that exact one? Or perhaps you are really partial to a particular whiskey, but cautious about branching out to others given the price tag? This allows us to quantify our best "back up!"
+```{r}
+library(sjmisc)
+distilleryProfiles <- flavorProfiles %>% rotate_df
+```
+We can, and should, do a few basic checks for our transformed data, such as ensuring that the shape is the expected 12 by 86, and checking the first few rows to ensure they take the expected form of *flavors* for rows and the index for *each distillery marking columns*.
+
+```{r}
+dim(distilleryProfiles)
+head(distilleryProfiles)
+```
+We see we have to make a few modifications to clean up the new data set, so we perform those and recheck.
+
+```{r}
+library(janitor)
+distilleryProfiles <- distilleryProfiles %>% row_to_names(row_number=1)
+
+distilleryProfiles <- distilleryProfiles %>% mutate_if(is.character,as.numeric)
+
+dim(distilleryProfiles)
+head(distilleryProfiles)
+```
+We see that the data does follow our expected form: there are 11 flavors represented for 86 whiskies, each flavor is rated from 0-4. The *transpose* appears to have not had any issues, so we can continue with our analysis.
+
+We might be tempted to analyze this data in the same way as we did the correlation of *flavors*, but there's a catch: we now have 86 rows by 12 columns. It becomes much less reasonable to check any given row manually, simply due to the size of the data.
+
+In addition, each *flavor profile* is now composed of 12 flavors - the mean, standard deviation, and other summary statistics make much less meaningful sense when taken across a *flavor profile*. We examine the summary statistics for the whiskey from **"Tullibardine"**. 
+```{r}
+summary(distilleryProfiles$"Tullibardine")
+```
+What does a mean of 1.25 truly indicate in this context? Or an IQR of 0.75-2.00? The minimum value of 0 and maximum value of 3 indicate that the most "intense" **flavor** is fairly strong and some may be absent, but we get no real understanding of the **flavor profile** from this at face value.
+
+Now we can create our **Linear Correlation Matrix**, similarly to how we correlated across individual flavors. This generates the correlation between the *flavor profiles* of each **Distillery**. 
+
+As a reminder:
+
+We pass a data frame (`distilleryProfiles`), and R will perform a pairwise correlation among columns, with each column representing the entire *flavor profile* of a single whiskey.
+
+We are returned a new data frame. Each column still corresponds to each *distillery's flavor profile*, but each **row** indicates which *distillery's flavor profile* the column *distillery's flavor profile* was associated with rather than an individual whiskey. This association calculates for *every aspect of the flavor profile, not just the aggregate "mean" scores*. 
+
+**This allows the computer to perform and return a much more robust association than could be easily performed by hand. For two distilleries to be associated, it is not enough that they have similar total values for all flavors, but that they have related intensity values for each individual flavor that composes that flavor profile.**
+
+Values of Pearson Correlation Coefficients range from -1 to 1. Negative values indicate a negative association (indicating the *flavor profiles of the distilleries* are **less** similar), while positive values indicate a positive association (indicating *flavor profiles of the distilleries* are **more** similar). A value of 0 indicates **no relationship**. If two **distilleries** create "opposite" *flavor profiles*, we would expect them to have a negative association, not no association.
+
+ We can interpret this to state that **the higher absolute value the Pearson Correlation Coefficient, the stronger the similarity of the overall flavor profiles between the whiskies produced at both distilleries**. If you are looking for your "backup" or "next best," look for a strong positive association with a known whiskey you like. If you are looking for something to avoid, look for a strong negative association with a known whiskey you like.
+
+We store this new DataFrame of correlation values as `distilleryCorrelations`.
+
+**It is important to remember that these associations do not imply direction or causality! As such, the association of *"GlenElgin"* to *"Scapa"* is the same as the association of *"Scapa"* to *"GlenElgin"*.**
+
+```{r}
+distilleryCorrelations <- cor(distilleryProfiles,method="pearson")
+```
+
+In attempting to examine the data for `distilleryCorrelations`, the size problem from `distilleryProfiles` is even more magnified - it is an 86 by 86 grid. As we have demonstrated checks for size, and examining the first few rows, we will omit those steps here.
+
+The most benefit for time is found through examination of a visualization of the data. 
+
+```{r}
+library(ComplexHeatmap)
+Heatmap(distilleryCorrelations, column_title = "Correlations of Distillery Flavor Profiles", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"), row_names_max_width=max_text_width(rownames(distilleryCorrelations), gp = gpar(fontsize = 12)) )
+```
+This is a very, very large and complex image, and it's hard to read any of the data points unless you have sufficient space on your display.
+
+For simplicity, we can omit the **Distillery** labels.
+
+```{r}
+library(ComplexHeatmap)
+Heatmap(distilleryCorrelations, column_title = "Correlations of Distillery Flavor Profiles", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"), show_row_names=FALSE, show_column_names = FALSE)
+```
+As we can see, our `Heatmap()` provides a wealth of information about our **distilleries** at a glance. 
+
+We can check our data against our expectations at a glance:
+1. We have an 86 x 86 product, reflecting that each **distillery's flavor profile** was correlated with each other **distillery's flavor profile**
+2. The diagonal represents consistent values of 1, as each **distillery** has a 1:1 correlation with itself.
+3. The data is mirrored symmetrically across the diagonal, as the associations have no direction.
+
+We can see bands that indicate certain **distilleries** appear to have opposite flavor profiles, and others appear to be strongly clustered.
+
+There is a particular inclination this visual pattern gives us: it appears to be a "**checkerboard pattern**." This indicates that there may be **"clusters"** we can sort these whiskies into, which could serve as a "short hand" or "label" that indicates these flavor profiles.
+
+# Clustering
+
+Scotch whiskies are traditionally clustered by **"Region"**, with six major regions: Speyside, Highlands, Lowlands, Islands, Campbelltown, and Islay. These regions are geographic, but do they also indicate any association with *flavor profile*? Do whiskies in the same **"Region"** have similar *flavor profiles*, or should we have a different indicator on labels?
+
+We already explored the association between *distilleries* (by *flavor profile*) in `distilleryCorrelations`. Since our original data set also included **"Regions"** for each whiskey, we can continue our analysis to explore this relationship.
+
+First, we recognized that the **Region** variable in the original data set indicated these regions. We can convert this column to a *factor* to reflect that.
+```{r}
+whiskey$Region <- as.factor(whiskey$Region)
+```
+
