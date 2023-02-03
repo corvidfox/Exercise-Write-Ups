@@ -5,7 +5,7 @@ output: html_notebook
 
 This exercise was originally completed in Python, during my completion of Week 4, Case Study 1 of the free access version of Harvard EdX course ["Using Python for Research"](https://www.edx.org/course/using-python-for-research) in the summer of 2022. This translation to R was performed in the Spring of 2023.
 
-The [Tidyverse](https://www.tidyverse.org/), [Janitor](https://cran.r-project.org/web/packages/janitor/index.html), (sjmisc)[https://cran.r-project.org/web/packages/sjmisc/index.html], and (ComplexHeatmap)(https://www.bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) packages were installed prior to generation, and this write-up was created as an Rnotebook with Rstudio.
+The [Tidyverse](https://www.tidyverse.org/), [Janitor](https://cran.r-project.org/web/packages/janitor/index.html), [sjmisc](https://cran.r-project.org/web/packages/sjmisc/index.html), [rBokeh](https://hafen.github.io/rbokeh/) and [ComplexHeatmap](https://www.bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) packages were installed prior to generation, and this write-up was created as an Rnotebook with Rstudio.
 
 The use of ComplexHeatmap has a requested citation from the creator:
 
@@ -21,6 +21,49 @@ SuppressMessages was used to suppress default console warning messages that thes
 library(readr)
 whiskey <- suppressMessages(suppressWarnings(read_csv("https://courses.edx.org/asset-v1:HarvardX+PH526x+2T2019+type@asset+block@whiskies.csv",show)))
 ```
+# Introductory Demonstration of Bokeh
+
+Bokeh allows data to be visualized with interactive elements that can render as `.html` files. The following demonstration is to show a general use of Bokeh by creating a 5x5 grid composed of two alternating colors. There is no particular reason to select a 5x5 plot aside from being an easily manageable size; it is unrelated to our Whiskies DataSet. 
+
+We can indicate the values we want for both our x and y axes, and the colors we would like to use for our grid. Bokeh takes hex values for colors. `#03f0fc` is a bright electric blue, while `#fca103` is a vibrant orange. Selection is based on personal preference and readability. Since colors can be fully customized, this provides great adaptability for modification of Bokeh plots for maximum readability.
+
+```{r}
+values <- seq(1:5)
+colors <- c("#03f0fc","#fca103")
+```
+We are able to use the built in `expand.grid()` function in R to create cartesian coordinates, and we rename our columns to clarify which values are our xs and which are ys.
+
+```{r}
+
+grid <- expand.grid(values,values)
+colnames(grid) <- c("ys","xs")
+```
+
+We then create all the color values for our Bokeh plot, stored in `bokehColors`, using a simple `for` loop. This loop iterates over all values in `grid`, and assigns them alternating colors from `colors` using a modulo operator and indexing.
+
+```{r}
+bokehColors <- vector(mode="list")
+for (i in seq(dim(grid)[1])){
+  bokehColors <- c(test,colors[(i%%2)+1])
+}
+```
+
+Finally, we determine our transparency values (`alphas`) of each point, where 0 is completely transparent and 1 is entirely opaque. The built in `seq()` function of R allows us to create an evently spaced gradient of values, which will result in decreasing transparency diagonally from bottom left to top right: the bottom leftmost value `(1,1)` will be transparent, while the top rightmost value `(5,5)` will be entirely opaque.
+
+```{r}
+alphas <- seq(0,1,length.out=dim(grid)[1])
+```
+
+Unlike Python, we do not need to declare a ColumnDataSource in R. Rather, we can simply declare and create our figure using R's built in syntax.
+
+```{r}
+basicBokeh <- figure(title="Basic rBokeh", tools = "hover") %>%
+  ly_crect(xs, ys, data = grid, 0.9, 0.9,
+           fill_color = bokehColors, line_color = bokehColors, fill_alpha = alphas, line_alpha = alphas, hover = "Values: @xs,@ys", xlab="", ylab="")
+basicBokeh
+```
+
+
 # Whiskey Exploration
 
 The first stage of utilizing any new data set should be exploration of the data included in the set, including its source.
