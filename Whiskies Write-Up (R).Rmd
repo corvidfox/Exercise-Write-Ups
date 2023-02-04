@@ -13,12 +13,22 @@ Gu, Z. (2016) Complex heatmaps reveal patterns and correlations in multidimensio
 
 # Importation of Data
 
+Libraries used for this data set were imported.
+
+```{r}
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(rbokeh))
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(ComplexHeatmap))
+suppressPackageStartupMessages(library(sjmisc))
+```
+
 Rstudio has a feature which makes importation of data from a CSV file to a tibble user friendly. This example write up will skip that step to demonstrate the ability to manually assess imported data.
 
 SuppressMessages was used to suppress default console warning messages that these features were not used.
 
 ```{r}
-library(readr)
 whiskey <- suppressMessages(suppressWarnings(read_csv("https://courses.edx.org/asset-v1:HarvardX+PH526x+2T2019+type@asset+block@whiskies.csv",show)))
 ```
 # Introductory Demonstration of Bokeh
@@ -44,7 +54,7 @@ We then create all the color values for our Bokeh plot, stored in `bokehColors`,
 ```{r}
 bokehColors <- vector(mode="list")
 for (i in seq(dim(grid)[1])){
-  bokehColors <- c(test,colors[(i%%2)+1])
+  bokehColors <- c(bokehColors,colors[(i%%2)+1])
 }
 ```
 
@@ -57,12 +67,25 @@ alphas <- seq(0,1,length.out=dim(grid)[1])
 Unlike Python, we do not need to declare a ColumnDataSource in R. Rather, we can simply declare and create our figure using R's built in syntax.
 
 ```{r}
-basicBokeh <- figure(title="Basic rBokeh", tools = "hover") %>%
-  ly_crect(xs, ys, data = grid, 0.9, 0.9,
-           fill_color = bokehColors, line_color = bokehColors, fill_alpha = alphas, line_alpha = alphas, hover = "Values: @xs,@ys", xlab="", ylab="")
+basicBokeh <- figure(title="Basic rBokeh", tools = "hover") %>% 
+  ly_crect(xs, ys, data = grid, 0.9, 0.9, fill_color = bokehColors, line_color = bokehColors, fill_alpha = alphas, line_alpha = alphas, hover = "Values: @xs,@ys", xlab="", ylab="")
 basicBokeh
 ```
 
+Bokeh can also be utilized to plot using latitude and longitude. It plots similarly to a scatter-plot, which is particularly useful for latitude and longitude naturally taking form in a cartesian (x,y) structure. rBokeh also has the capability to automatically assign a consistent glyph and/or color structure to data points, based on categorical variables. To demonstrate, a dataframe consisting of *"X"*, *"Y"*, and *"Category"* values is generated, and visualized with rBokeh.
+
+```{r}
+sampleXs <- c(1,4,6,8,3,4,6)
+sampleYs <- c(2,6,9,3,2,1,5)
+Categories<- c("Alpha","Beta","Delta","Alpha","Alpha","Beta","Delta")
+sampleCartesian <- data.frame (sampleYs,sampleXs,Categories)
+colnames(sampleCartesian) <- c("X-Values","Y-Values", "Category")
+
+cartesianPlot <- figure(title="Sample Cartesian rBokeh", tools="hover") %>%
+  ly_points(sampleXs, sampleYs, data = sampleCartesian, color = Categories, glyph = Categories, hover = "Location: @sampleXs,@sampleYs", xlab = "X-Values", ylab = "Y-Values")
+cartesianPlot
+```
+Note the change to the configuration of the *hover* tool: x and y coordinates are still shown when hovering over any data point, but are now labeled as **"Location"**. Observe how on the rendered visualization, there is no information provided by *hover* where a data point was not plotted.
 
 # Whiskey Exploration
 
@@ -80,7 +103,6 @@ head(whiskey)
 ```
 We can see that the first row appears to indicate column names, so we can simplify our tibble. There is a function for this in the Janitor package.
 ```{r}
-library(janitor)
 whiskey <- whiskey %>% row_to_names(row_number=1)
 head(whiskey)
 ```
@@ -100,7 +122,6 @@ We find that the remaining columns describe the geographic location of the disti
 
 We can drop both columns that appear to serve as a RowID, since we do not need them. Similarly, we will be generating values for the last column, **Group**, and can drop the imported values. The Dplyr package has a function for this.
 ```{r}
-library(dplyr)
 whiskey <- select(whiskey,-c(1,2,20))
 head(whiskey)
 ```
@@ -202,7 +223,6 @@ While this correlation data set, at 12 by 12, is manageable, this process needs 
 
 The ComplexHeatmap library provides us with a robust tool for creating a heatmap of the correlation values.
 ```{r}
-library(ComplexHeatmap)
 Heatmap(flavorCorrelations, column_title = "Correlations of Flavors in Whiskeys", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"))
 ```
 As we can see, our `Heatmap` provides a wealth of information about our *flavors* at a glance. 
@@ -215,7 +235,7 @@ We can check our data against our expectations at a glance:
 In any individual *flavor profile*, it is unlikely for a whiskey to have **"Sweetness"**, while also being either **"Medicinal"** or **"Smoky"**. Conversely, a whiskey with **"Body"** appears to be more likely to also be considered **"Winey"**.
 
 This is an interesting overview of all of the whiskies, but what else can we do with this data?
-#### Linear Pairwise Correlations: Distillery to Distillery (Comparison of Flavor Profiles)
+#### Pairwise Linear Correlations: Distillery to Distillery (Comparison of Flavor Profiles)
 
 The data takes on a much more interesting form for analysis when we take it's `transpose`. When we take the `transpose` of a data frame, we "flip" the data across its diagonal - rows convert into columns, and vice versa.
 
@@ -223,7 +243,6 @@ In our `flavorProfile` data set, this organizes each column into the *flavor pro
 
 This quantifies how similar the flavor profile of a **"Tullibardine"** whiskey is to, say, an **"Aberfeldy"** whiskey. Which could be quite useful. Do you have anyone who is partial to a very particular whiskey, and worried that you might not be able to get that exact one? Or perhaps you are really partial to a particular whiskey, but cautious about branching out to others given the price tag? This allows us to quantify our best "back up!"
 ```{r}
-suppressMessages(library(sjmisc))
 distilleryProfiles <- flavorProfiles %>% rotate_df
 ```
 We can, and should, do a few basic checks for our transformed data, such as ensuring that the shape is the expected 12 by 86, and checking the first few rows to ensure they take the expected form of *flavors* for rows and the index for *each distillery marking columns*.
@@ -235,7 +254,6 @@ head(distilleryProfiles)
 We see we have to make a few modifications to clean up the new data set, so we perform those and recheck.
 
 ```{r}
-library(janitor)
 distilleryProfiles <- distilleryProfiles %>% row_to_names(row_number=1)
 
 distilleryProfiles <- distilleryProfiles %>% mutate_if(is.character,as.numeric)
@@ -280,7 +298,6 @@ In attempting to examine the data for `distilleryCorrelations`, the size problem
 The most benefit for time is found through examination of a visualization of the data. 
 
 ```{r}
-library(ComplexHeatmap)
 Heatmap(distilleryCorrelations, column_title = "Correlations of Distillery Flavor Profiles", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"), row_names_max_width=max_text_width(rownames(distilleryCorrelations), gp = gpar(fontsize = 12)) )
 ```
 This is a very, very large and complex image, and it's hard to read any of the data points unless you have sufficient space on your display.
@@ -288,7 +305,6 @@ This is a very, very large and complex image, and it's hard to read any of the d
 For simplicity, we can omit the **Distillery** labels.
 
 ```{r}
-library(ComplexHeatmap)
 Heatmap(distilleryCorrelations, column_title = "Correlations of Distillery Flavor Profiles", heatmap_legend_param = list(at = c(-1,0,1), labels = c("Negative","None","Positive"), title = "Correlation"), show_row_names=FALSE, show_column_names = FALSE)
 ```
 As we can see, our `Heatmap()` provides a wealth of information about our **distilleries** at a glance. 
@@ -308,8 +324,98 @@ Scotch whiskies are traditionally clustered by **"Region"**, with six major regi
 
 We already explored the association between *distilleries* (by *flavor profile*) in `distilleryCorrelations`. Since our original data set also included **"Regions"** for each whiskey, we can continue our analysis to explore this relationship.
 
+## Region Analysis - Unsorted
+
+First, lets get an understanding of the value that **"Region"** provides us. We can do this with a few rBokeh grid visualizations.
+
+It would be tempting to simply use `distillerycorrelations`, as this already shows us all of the associations between our **distilleries**. However, this data is not sorted meaningfully by **"Region"** and would be difficult to interpret. To solidify this, lets go through the process of visualization without sorting, and compare it to our sorted model.
+
 First, we recognized that the **Region** variable in the original data set indicated these regions. We can convert this column to a *factor* to reflect that.
 ```{r}
 whiskey$Region <- as.factor(whiskey$Region)
 ```
+
+Second, we regonize that our linear correlation matrix has 86 colums and 86 rows, which share the same labels: each of the distilleries, in order. We can use the built in `rep()` function of R to generate an **(x,y)** grid representing each Distillery pairing.
+
+We start by converting our Correlations into a list.
+
+```{r}
+ruCorr<-as.list(distilleryCorrelations)
+```
+
+We can then build our X and Y values for a rBokeh visualization of our correlations, based on the default method that R used to turn our `distilleryCorrelation` dataframe into a list. Since our correlations have each **Distillery** paired with each **Distillery**, we can use our **Distillery** values to make this process more streamlined with the `rep()` function.
+
+```{r}
+rusXs <- rep(whiskey$Distillery, each=dim(whiskey)[1])
+rusYs <- rep(whiskey$Distillery,dim(whiskey)[1])
+
+ruData<-data.frame(rusXs,rusYs)
+ruData$Correlations<-ruCorr
+
+```
+
+We want to define colors for each region, as well as specify *white* for a correlation less than or equal to 0.7, and light grey for a correlation greater than 0.7 but from different regions. We can use the `levels()` function to get a `regions` list of each *factor level* in the **Region** variable. We can make a list of `regionColors` the same length. This will let us use the `match` function to use these as a dictionary.
+
+```{r}
+regions <- levels(whiskey$Region)
+regionColors <- c("#cc78bc", "#de8f05","#d55e00","#ca9161","#029e73","#0173b2")
+
+white<-"#ffffff"
+lightGrey<- "#d3d3d3"
+
+```
+
+We use a for loop to assign a color to each of our X and Y pairs in our data set, and add them into our data set
+
+```{r}
+ruColors <- vector(mode="list")
+for(i in seq(dim(distilleryCorrelations)[1])){
+  #top of nest
+  for(j in seq(dim(distilleryCorrelations)[1])){
+    #nest in second loop
+    if (distilleryCorrelations[i,j] < 0.7) {
+      ruColors <- c(ruColors, white)
+    }
+    if (distilleryCorrelations[i,j] >= 0.7){
+      #get distillery for both column and row whiskies
+      colWhiskeyRegion <- whiskey[whiskey$Distillery == colnames(distilleryCorrelations)[i],]$Region
+      rowWhiskeyRegion <- whiskey[whiskey$Distillery == colnames(distilleryCorrelations)[j],]$Region
+      #determine if regions are equal
+      if (colWhiskeyRegion==rowWhiskeyRegion){
+        ruColors <- c(ruColors, regionColors[match(colWhiskeyRegion,regions)])
+      }
+      if (colWhiskeyRegion!=rowWhiskeyRegion){
+        ruColors <- c(ruColors, lightGrey)
+      }
+    }
+  }
+}
+
+ruData$Correlations<-ruCorr
+ruData$Colors<-ruColors
+colnames(ruData) <- c("RU-Ys", "RU-Xs","Correlation","Region Color")
+```
+
+And finally, we build our rBokeh visualization. Since there are so many values for distillery, we hide our x and y axes labels for readability. We ensure those values are in the `hover` information.
+
+```{r}
+rurBokeh <- figure(title="RUrBokeh") %>%
+  ly_crect(rusXs, rusYs, data = ruData, 0.9, 0.9,
+           fill_color = ruColors, line_color = ruColors, hover = "Whiskies: @rusXs,@rusYs. Correlation: @ruCorr") %>%
+  x_axis(label="",visible=FALSE) %>% y_axis(label="", visible=FALSE)
+rurBokeh
+```
+As we can see, it's difficult to tell if there truly are any meaningful associations between **distilleries** that share the same **"Region"** or not. There are several light grey squares. There appear to be several blue squares. But how can we tell if there are **"Region"** values that have poor association? This is where sorting the data improves our visualization.
+
+## Region Analysis - Sorted
+
+The difference in the power of the visualization comes from the pre-processing of the data. The importance of preparing your data properly for any visualization cannot be overstated. A poor pre-processing will weaken any visual impact, while appropriate pre-processing will strengthen arguments you make from your analysis. Lets investigate how sorting our whiskies by **"Region"** prior to analysis and visualization will increase the impact and clarity of our visualization.
+
+R has a built in method that can sort our data frame by a single column's value: `order()`. We specify that we would like to sort our values by **"Region"**. In inspecting the data, we can dtermine our transformation was successful. The rows of the data were sorted as units, so all data associated with a specific whiskey in our data set remains associated with that same data, it is simply the order that has changed.
+
+```{r}
+regionalWhiskeys <- whiskey[order(whiskey$Region),]
+```
+
+
 
