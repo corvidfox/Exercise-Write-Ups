@@ -1,4 +1,4 @@
-#What is this?
+# What is this?
 
 This is a basic showcase of my "Whiskies" Project. I originally wrote the project in Python, and translated it into R.
 
@@ -6,7 +6,7 @@ The exercise originated from my completion of Week 4, Case Study 1 of the free a
 
 It was intended to be an exercise to demonstrate the use of Bokeh for interactive visualizations of data. 
 
-#Python:
+# Python:
 I completed my expansion write-up in Python in November 2022. 
 
 NumPy, Pandas, PyPlot, Scikit-Learn, and Bokeh libraries were used. 
@@ -23,7 +23,7 @@ The Bokeh visualizations for the Python version do not generate contained within
 - Whiskey Locations and Regions.html
 - Whiskey Locations and Groups.html
 
-#R:
+# R:
 I began my R translation in February 2022.
 
 
