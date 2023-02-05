@@ -11,10 +11,10 @@ I completed my expansion write-up in Python in November 2022.
 
 NumPy, Pandas, PyPlot, Scikit-Learn, and Bokeh libraries were used. 
 
-The Python example consists of a Jupyter notebook: \
+The Python example consists of a Jupyter notebook:
 - Whiskies Write-Up.ipynb
 
-The Bokeh visualizations for the Python version do not generate contained within the Jupyter notebook. They are included in this repository. \
+The Bokeh visualizations for the Python version do not generate contained within the Jupyter notebook. They are included in this repository.
 - Bokeh_Basic.html
 - Spatial_scatter_Bokeh_Example.html
 - Whiskeys by Region - Sorted by Region.html
