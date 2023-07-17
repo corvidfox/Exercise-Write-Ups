@@ -1,6 +1,6 @@
 # What is this?
 
-This is a basic showcase of my "Whiskies" Project. I originally wrote the project in Python, and translated it into R.
+This is a basic showcase of my "Whiskies" Project. I originally wrote the project in Python, and began translating it into R.
 
 The exercise originated from my completion of Week 4, Case Study 1 of the free access version of Harvard EdX course ["Using Python for Research"](https://www.edx.org/course/using-python-for-research) in July 2022. 
 
